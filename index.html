@@ -1,0 +1,277 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gym Tracker</title>
+
+  <link rel="icon" href="data:,"> <!-- icono vacío temporal -->
+
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Arial', sans-serif;
+    }
+
+    body {
+      background-color: #f4f6f8;
+      color: #333;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+
+    #app {
+      flex: 1;
+      padding: 15px;
+      margin-bottom: 60px;
+      overflow-y: auto;
+    }
+
+    .bottom-nav {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      display: flex;
+      background: #fff;
+      border-top: 1px solid #ccc;
+    }
+
+    .bottom-nav button {
+      flex: 1;
+      padding: 12px;
+      font-size: 22px;
+      border: none;
+      background: none;
+    }
+
+    h2 {
+      text-align: center;
+      margin: 10px 0;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 15px;
+    }
+
+    th, td {
+      border: 1px solid #ccc;
+      padding: 6px;
+      text-align: center;
+    }
+
+    button {
+      background-color: #007bff;
+      color: white;
+      border: none;
+      padding: 10px;
+      border-radius: 8px;
+      cursor: pointer;
+      width: 100%;
+      margin: 5px 0;
+      font-size: 16px;
+    }
+
+    button:hover {
+      background-color: #0056b3;
+    }
+
+    input {
+      width: 100%;
+      padding: 5px;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+    }
+
+    .backup-buttons {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+
+  <nav class="bottom-nav">
+    <button id="homeBtn">🏠</button>
+    <button id="exercisesBtn">📋</button>
+  </nav>
+
+  <script>
+    const app = document.getElementById('app');
+    const homeBtn = document.getElementById('homeBtn');
+    const exercisesBtn = document.getElementById('exercisesBtn');
+
+    const exerciseList = [
+      "Jalón al pecho",
+      "Sentadillas",
+      "Leg Curl Hechado",
+      "Leg Curl Sentado",
+      "Press Banca"
+    ];
+
+    homeBtn.addEventListener('click', showHome);
+    exercisesBtn.addEventListener('click', showExercises);
+
+    function showHome() {
+      const allData = JSON.parse(localStorage.getItem('gymData') || '{}');
+      const dates = Object.values(allData)
+          .flat()
+          .map(s => s.date)
+          .filter((v, i, a) => a.indexOf(v) === i)
+          .sort((a, b) => new Date(b) - new Date(a));
+
+      const lastTwo = dates.slice(0, 2);
+
+      let html = `<h2>🏠 Últimos entrenamientos</h2>`;
+
+      if (lastTwo.length === 0) {
+        html += `<p>Sin registro</p>`;
+      } else {
+        lastTwo.forEach(date => {
+          html += `<h3>${date}</h3>`;
+          html += `<table><tr><th>Ejercicio</th><th>Series</th></tr>`;
+          exerciseList.forEach(ex => {
+            const sessions = (allData[ex] || []).filter(s => s.date === date);
+            if (sessions.length === 0) {
+              html += `<tr><td>${ex}</td><td>Sin registro</td></tr>`;
+            } else {
+              const seriesStr = sessions[0].series.map(
+                s => `${s.series}: ${s.weight}x${s.reps} (${s.note || "-"})`
+              ).join("<br>");
+              html += `<tr><td>${ex}</td><td>${seriesStr}</td></tr>`;
+            }
+          });
+          html += `</table>`;
+        });
+      }
+
+      html += `
+      <div class="backup-buttons">
+        <button onclick="exportBackup()">💾 Guardar respaldo</button>
+        <input type="file" id="importFile" accept=".json" style="display:none">
+        <button onclick="document.getElementById('importFile').click()">📂 Cargar respaldo</button>
+      </div>
+      `;
+
+      app.innerHTML = html;
+
+      const fileInput = document.getElementById('importFile');
+      fileInput.addEventListener('change', importBackup);
+    }
+
+    function showExercises() {
+      let html = `<h2>📋 Ejercicios</h2>`;
+      exerciseList.forEach(ex => {
+        html += `<button onclick="showExercise('${ex}')">${ex}</button>`;
+      });
+      app.innerHTML = html;
+    }
+
+    function showExercise(name) {
+      const today = new Date().toISOString().split('T')[0];
+      const data = JSON.parse(localStorage.getItem('gymData') || '{}');
+      const history = data[name] || [];
+
+      let html = `
+          <button onclick="showExercises()">← Volver</button>
+          <h2>${name}</h2>
+          <h3>Sesión de hoy (${today})</h3>
+          <table>
+              <tr><th>Serie</th><th>Peso</th><th>Reps</th><th>Nota</th></tr>
+      `;
+
+      for (let i = 1; i <= 4; i++) {
+        html += `
+        <tr>
+            <td>${i}</td>
+            <td><input type="number" id="w${i}" placeholder="kg"></td>
+            <td><input type="number" id="r${i}" placeholder="reps"></td>
+            <td><input type="text" id="n${i}" placeholder="nota"></td>
+        </tr>`;
+      }
+
+      html += `</table>
+          <button onclick="saveSession('${name}')">LISTO</button>
+          <h3>Historial</h3>
+      `;
+
+      if (history.length === 0) {
+        html += `<p>Sin registros previos.</p>`;
+      } else {
+        history.sort((a, b) => new Date(b.date) - new Date(a.date));
+        history.forEach(session => {
+          const seriesStr = session.series.map(
+            s => `${s.series}: ${s.weight}x${s.reps} (${s.note || "-"})`
+          ).join("<br>");
+          html += `<h4>${session.date}</h4><p>${seriesStr}</p>`;
+        });
+      }
+
+      app.innerHTML = html;
+    }
+
+    function saveSession(name) {
+      const today = new Date().toISOString().split('T')[0];
+      const data = JSON.parse(localStorage.getItem('gymData') || '{}');
+
+      const series = [];
+      for (let i = 1; i <= 4; i++) {
+        const w = document.getElementById(`w${i}`).value;
+        const r = document.getElementById(`r${i}`).value;
+        const n = document.getElementById(`n${i}`).value;
+        if (w && r) series.push({ series: i, weight: w, reps: r, note: n });
+      }
+
+      if (series.length === 0) return alert("No ingresaste datos.");
+
+      if (!data[name]) data[name] = [];
+      data[name].push({ date: today, series });
+      localStorage.setItem('gymData', JSON.stringify(data));
+
+      alert("Sesión guardada ✅");
+      showHome();
+    }
+
+    function exportBackup() {
+      const data = localStorage.getItem('gymData') || '{}';
+      const blob = new Blob([data], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "gym_backup.json";
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function importBackup(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = e => {
+        try {
+          const importedData = JSON.parse(e.target.result);
+          localStorage.setItem('gymData', JSON.stringify(importedData));
+          alert("Respaldo cargado correctamente ✅");
+          showHome();
+        } catch {
+          alert("Archivo inválido ❌");
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    showHome();
+  </script>
+</body>
+</html>
